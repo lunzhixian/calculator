@@ -2,6 +2,10 @@ name: Build Arnis Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-arnis-android.yml'
 
 permissions:
   contents: write
