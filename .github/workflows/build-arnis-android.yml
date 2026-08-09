@@ -36,23 +36,26 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
 
+      # Tauri Android 要求 lib target，Arnis 是纯 bin 项目，这里做适配：
+      # src/main.rs -> src/lib.rs (fn main -> pub fn run)，再生成调用它的 main.rs
+      - name: Adapt source for Android (add lib target)
+        run: |
+          cd arnis
+          cp src/main.rs src/lib.rs
+          sed -i 's/^fn main()/pub fn run()/' src/lib.rs
+          cat > src/main.rs <<'EOF'
+fn main() {
+    arnis::run();
+}
+EOF
+          echo "=== lib.rs 里 run 定义 ==="
+          grep -n "pub fn run" src/lib.rs
+          echo "=== 新 main.rs ==="
+          cat src/main.rs
+
       - name: Fetch dependencies
         working-directory: arnis
         run: cargo fetch --locked
-
-      - name: Patch Arnis for Android (add lib.rs mobile entry)
-        working-directory: arnis
-        run: |
-          # Tauri Android 构建要求 crate 必须有 lib target + mobile_entry_point
-          cp src/main.rs src/lib.rs
-          cat >> src/lib.rs <<'EOF'
-
-          #[cfg_attr(mobile, tauri::mobile_entry_point)]
-          pub fn run() {
-              gui::run_gui();
-          }
-          EOF
-          grep -n "mobile_entry_point" src/lib.rs
 
       - name: Init Android project
         working-directory: arnis
