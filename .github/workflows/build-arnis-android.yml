@@ -40,6 +40,20 @@ jobs:
         working-directory: arnis
         run: cargo fetch --locked
 
+      - name: Patch Arnis for Android (add lib.rs mobile entry)
+        working-directory: arnis
+        run: |
+          # Tauri Android 构建要求 crate 必须有 lib target + mobile_entry_point
+          cp src/main.rs src/lib.rs
+          cat >> src/lib.rs <<'EOF'
+
+          #[cfg_attr(mobile, tauri::mobile_entry_point)]
+          pub fn run() {
+              gui::run_gui();
+          }
+          EOF
+          grep -n "mobile_entry_point" src/lib.rs
+
       - name: Init Android project
         working-directory: arnis
         run: cargo tauri android init
