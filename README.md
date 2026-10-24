@@ -43,10 +43,17 @@ Android 版即把同一个 `calculator.html` 放进 WebView 壳（`android/`）�
 ## 测试
 
 ```bash
-node test-calculator.js
+node test-calculator.js   # 25 项：无依赖，用极简假 DOM 跑页面脚本
+node test-jsdom.js        # 45 项：需要 npm i jsdom，用真实 DOM 事件驱动（点击/键盘/剪贴板）
 ```
 
-用极简假 DOM 跑真实页面脚本，覆盖优先级、结合性、括号、隐性乘、除零、链式精度、复制监听器数量等 25 项行为。
+两套用例覆盖优先级与结合性（`-2^2`、`2^3^2`、`1-2-3`）、括号与隐式乘、除零与 ∞ 续算、
+链式精度、千分位与复制内容、退格、百分比/开方/平方、复制按钮监听器数量、Ctrl+C 不被劫持等。
+运行 `test-jsdom.js` 前先装依赖：
+
+```bash
+npm i jsdom && node test-jsdom.js
+```
 
 ## 许可证
 

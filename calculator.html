@@ -410,6 +410,13 @@
     return parts.join('.');
   }
 
+  // 立即型一元运算（√ / x² / %）写回输入区：与屏幕精度一致
+  function rawShort(n) {
+    if (!n.isFinite()) return n.isNegative() ? '-Infinity' : 'Infinity';
+    if (n.isInteger() && n.abs().lt('1e21')) return n.toFixed(0);
+    return n.toSignificantDigits(SHOW_SD).toString();
+  }
+
   // 存回算式用：保留 34 位有效数字
   function raw(n) {
     if (!n.isFinite()) return n.isNegative() ? '-Infinity' : 'Infinity';
@@ -429,7 +436,7 @@
       if (isOp(t)) {
         const unary = (t === '-' || t === '+') && (k === 0 || isOp(prev) || prev === '(');
         if (unary) { if (t === '-') out += '−'; }
-        else out += ' ' + GLYPH[t] + ' ';
+        else out += (t === '^' ? '^' : ' ' + GLYPH[t] + ' ');
       } else if (t === '(') {
         if (prev !== undefined && (isNum(prev) || prev === ')')) out += ' ';
         out += '(';
@@ -540,7 +547,7 @@
   function pressPercent() {
     if (justEvaluated) { expr = raw(new Decimal(expr).div(100)); render(); return; }
     if (current === '' || current === '-' || current === '0') return;
-    current = raw(new Decimal(current).div(100));
+    current = rawShort(new Decimal(current).div(100));
     render();
   }
 
@@ -556,7 +563,7 @@
     if (current !== '' && current !== '-' && current !== '0') {
       const v = new Decimal(current).sqrt();
       if (v.isNaN()) { showError('√(' + current + ')'); return; }
-      current = raw(v);
+      current = rawShort(v);
       render();
       return;
     }
@@ -577,7 +584,7 @@
       return;
     }
     if (current !== '' && current !== '-' && current !== '0') {
-      current = raw(new Decimal(current).pow(2));
+      current = rawShort(new Decimal(current).pow(2));
       render();
       return;
     }

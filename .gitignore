@@ -9,3 +9,7 @@ android/assets/
 .idea/
 .vscode/
 .DS_Store
+
+# 测试依赖
+node_modules/
+package-lock.json
