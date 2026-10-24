@@ -20,7 +20,7 @@ const small = () => doc.getElementById('expression').textContent;
 
 // 按可见文本找按键，模拟真实点击（走 DOM 事件，不是直接调函数）
 function btn(label) {
-  const all = [...doc.querySelectorAll('.buttons button')];
+  const all = [...doc.querySelectorAll('.pad button')];
   const hit = all.find(b => b.textContent.trim() === label);
   if (!hit) throw new Error('找不到按键: ' + label);
   return hit;
@@ -38,7 +38,7 @@ const type = (s) => {
     else if (ch === ')') key(')');
   }
 };
-const clear = () => key('C');
+const clear = () => key('AC');
 const calc = (s) => { clear(); type(s); key('='); return result(); };
 
 function pressKey(k, opts = {}) {
@@ -55,7 +55,7 @@ const check = (name, got, want) => {
 
 // ---------- 基础 ----------
 check('初始显示', result(), '0');
-check('按键总数', doc.querySelectorAll('.buttons button').length, 24);
+check('按键总数', doc.querySelectorAll('.pad button').length, 24);
 check('Decimal 已加载', typeof window.Decimal, 'function');
 check('复制按钮存在', !!doc.getElementById('copyBtn'), true);
 
@@ -156,7 +156,7 @@ clear(); type('9'); key('=');
 check('清空后可继续算', result(), '9');
 
 // ---------- DOM / 结构 ----------
-const btns = [...doc.querySelectorAll('.buttons button')];
+const btns = [...doc.querySelectorAll('.pad button')];
 check('所有按键都有文本', btns.every(b => b.textContent.trim().length > 0), true);
 check('括号键已存在', btns.filter(b => ['(', ')'].includes(b.textContent.trim())).length, 2);
 check('无重复按键文本', new Set(btns.map(b => b.textContent.trim())).size, 24);

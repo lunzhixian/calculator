@@ -2,221 +2,341 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>图形化计算器</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0a0b0f">
+<title>计算器</title>
 <style>
   :root {
-    --bg: #1e1e2e;
-    --panel: rgba(255, 255, 255, 0.06);
-    --display-bg: #181825;
-    --accent: #89b4fa;
-    --danger: #f38ba8;
-    --text: #cdd6f4;
-    --text-dim: #7f849c;
-    --num: #313244;
-    --op: #45475a;
-    --eq: #89b4fa;
-    --radius: 18px;
+    --bg: #0a0b0f;
+    --glow-a: rgba(108, 124, 255, 0.20);
+    --glow-b: rgba(90, 200, 250, 0.12);
+
+    --surface: rgba(255, 255, 255, 0.055);
+    --surface-hover: rgba(255, 255, 255, 0.10);
+    --card-border: rgba(255, 255, 255, 0.075);
+    --card-bg-a: rgba(255, 255, 255, 0.055);
+    --card-bg-b: rgba(255, 255, 255, 0.015);
+
+    --text: #eef1f8;
+    --text-dim: #7d859b;
+    --text-fn: #98a0b5;
+
+    --accent: #8298ff;
+    --accent-soft: rgba(130, 152, 255, 0.15);
+    --accent-strong: #7c8cff;
+    --on-accent: #0a0b12;
+
+    --radius-card: 30px;
+    --radius-key: 18px;
+    --gap: 10px;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #eef0f6;
+      --glow-a: rgba(108, 124, 255, 0.18);
+      --glow-b: rgba(90, 200, 250, 0.16);
+
+      --surface: rgba(255, 255, 255, 0.85);
+      --surface-hover: #ffffff;
+      --card-border: rgba(16, 22, 40, 0.07);
+      --card-bg-a: rgba(255, 255, 255, 0.90);
+      --card-bg-b: rgba(255, 255, 255, 0.65);
+
+      --text: #10131c;
+      --text-dim: #767e93;
+      --text-fn: #5d6478;
+
+      --accent: #4a63e8;
+      --accent-soft: rgba(74, 99, 232, 0.10);
+      --accent-strong: #4659e0;
+      --on-accent: #ffffff;
+    }
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  html, body { height: 100%; }
+
   body {
-    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI',
+                 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #1e1e2e 0%, #302d41 50%, #1e1e2e 100%);
-    padding: 20px;
+    padding: calc(20px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
 
-  .title {
-    color: var(--text);
-    font-size: 14px;
-    letter-spacing: 4px;
-    margin-bottom: 16px;
-    opacity: 0.7;
+  /* 背景光晕 */
+  body::before,
+  body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(90px);
+    z-index: 0;
+  }
+  body::before {
+    width: 460px; height: 460px;
+    background: var(--glow-a);
+    top: -160px; left: -120px;
+  }
+  body::after {
+    width: 380px; height: 380px;
+    background: var(--glow-b);
+    bottom: -140px; right: -110px;
   }
 
-  .calculator {
-    background: var(--panel);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: var(--radius);
-    padding: 22px;
-    width: 340px;
-    max-width: 100%;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-    user-select: none;
+  .app {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 372px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
 
-  .display {
-    background: var(--display-bg);
-    border-radius: 14px;
-    padding: 18px 20px;
-    margin-bottom: 18px;
-    min-height: 110px;
+  .calc {
+    background: linear-gradient(180deg, var(--card-bg-a), var(--card-bg-b));
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-card);
+    padding: 16px;
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    box-shadow:
+      0 32px 80px -28px rgba(0, 0, 0, 0.85),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  @media (prefers-color-scheme: light) {
+    .calc { box-shadow: 0 28px 60px -30px rgba(20, 26, 45, 0.45), inset 0 1px 0 #fff; }
+  }
+
+  /* ---------- 显示区 ---------- */
+  .screen {
+    position: relative;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    gap: 8px;
+    gap: 6px;
+    min-height: 128px;
+    padding: 44px 10px 12px;
     overflow: hidden;
-    position: relative;
   }
 
-  .copy-btn {
+  .copy {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 2px;
+    right: 2px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font: inherit;
     font-size: 11px;
-    padding: 4px 12px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
+    letter-spacing: 0.4px;
     color: var(--text-dim);
-    box-shadow: none;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    letter-spacing: 0.5px;
+    background: var(--surface);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    padding: 5px 11px;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    transition: color 0.16s, background 0.16s, border-color 0.16s;
   }
-  .copy-btn:hover { background: rgba(137, 180, 250, 0.18); color: var(--accent); filter: none; }
-  .copy-btn:active { transform: none; box-shadow: none; }
-  .copy-btn.copied { background: rgba(166, 227, 161, 0.2); color: #a6e3a1; }
+  .copy:hover { color: var(--accent); background: var(--surface-hover); border-color: transparent; }
+  .copy:active { transform: scale(0.96); }
+  .copy.copied { color: #34c759; border-color: rgba(52, 199, 89, 0.35); background: rgba(52, 199, 89, 0.12); }
 
+  .expr {
+    font-size: 13px;
+    line-height: 1.3;
+    color: var(--text-dim);
+    text-align: right;
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    min-height: 18px;
+    font-variant-numeric: tabular-nums;
+  }
+  .expr::-webkit-scrollbar { display: none; }
+
+  .value {
+    font-size: 44px;
+    line-height: 1.12;
+    font-weight: 600;
+    letter-spacing: -1.2px;
+    text-align: right;
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    font-variant-numeric: tabular-nums;
+    transform-origin: right center;
+    transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1), color 0.16s;
+  }
+  .value::-webkit-scrollbar { display: none; }
+  .value.flash { transform: scale(1.02); }
+
+  #display.error .value { color: #ff6b6b; }
+
+  /* ---------- 键盘 ---------- */
+  .pad {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--gap);
+  }
+
+  .key {
+    font: inherit;
+    font-size: 21px;
+    font-weight: 500;
+    height: 62px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-key);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s cubic-bezier(0.22, 1, 0.36, 1),
+                background 0.16s, color 0.16s, border-color 0.16s, box-shadow 0.16s;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .key:hover { background: var(--surface-hover); }
+  .key:active { transform: scale(0.955); }
+  .key:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .key.fn {
+    background: transparent;
+    color: var(--text-fn);
+    font-size: 18px;
+  }
+  .key.fn:hover { background: var(--surface); color: var(--text); }
+
+  .key.op {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 22px;
+  }
+  .key.op:hover { background: rgba(130, 152, 255, 0.24); }
+  .key.op.active {
+    background: var(--accent-strong);
+    color: var(--on-accent);
+    box-shadow: 0 6px 20px -6px var(--accent-strong);
+  }
+
+  .key.eq {
+    background: linear-gradient(180deg, #8b9cff, var(--accent-strong));
+    color: #fff;
+    font-weight: 600;
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 10px 26px -10px rgba(108, 124, 255, 0.85);
+  }
+  .key.eq:hover { filter: brightness(1.06); }
+
+  .hint {
+    text-align: center;
+    font-size: 11.5px;
+    letter-spacing: 0.3px;
+    color: var(--text-dim);
+    opacity: 0.75;
+  }
+
+  /* ---------- 提示条 ---------- */
   .toast {
     position: fixed;
     left: 50%;
-    bottom: 40px;
-    transform: translateX(-50%) translateY(10px);
-    background: rgba(49, 50, 68, 0.95);
-    color: var(--text);
+    bottom: calc(32px + env(safe-area-inset-bottom));
+    transform: translateX(-50%) translateY(12px);
+    background: rgba(28, 32, 44, 0.92);
+    color: #eef1f8;
     font-size: 13px;
-    padding: 8px 20px;
+    padding: 9px 18px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.7);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.25s, transform 0.25s;
-    z-index: 100;
+    transition: opacity 0.22s, transform 0.22s;
+    z-index: 10;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  .expression {
-    font-size: 15px;
-    color: var(--text-dim);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-height: 22px;
-    text-align: right;
+  @media (max-height: 720px) {
+    .calc { padding: 12px; }
+    .screen { min-height: 108px; padding-top: 38px; }
+    .value { font-size: 38px; }
+    .key { height: 54px; font-size: 19px; }
+    :root { --gap: 8px; }
   }
 
-  .result {
-    font-size: 38px;
-    font-weight: 600;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-align: right;
-    transition: transform 0.1s;
+  @media (max-width: 340px) {
+    .key { height: 54px; font-size: 19px; }
+    .value { font-size: 36px; }
   }
 
-  .result.flash { transform: scale(1.03); }
-
-  .buttons {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-  }
-
-  button {
-    font-size: 20px;
-    font-family: inherit;
-    border: none;
-    border-radius: 12px;
-    padding: 16px 0;
-    cursor: pointer;
-    color: var(--text);
-    background: var(--num);
-    transition: transform 0.08s, filter 0.15s, box-shadow 0.15s;
-    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25);
-  }
-
-  button:hover { filter: brightness(1.2); }
-  button:active {
-    transform: translateY(2px);
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
-  }
-
-  .op { background: var(--op); }
-  .op.active { background: var(--accent); color: #1e1e2e; }
-  .fn { background: #3b3b52; color: var(--text-dim); }
-  .fn:hover { color: var(--text); }
-  .eq {
-    background: var(--eq);
-    color: #1e1e2e;
-    font-weight: 700;
-  }
-
-  .error .result { color: var(--danger); }
-
-  .footer {
-    margin-top: 14px;
-    font-size: 12px;
-    color: var(--text-dim);
-    text-align: center;
-    letter-spacing: 1px;
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
   }
 </style>
 </head>
 <body>
 
-  <div class="title">✦ CALCULATOR ✦</div>
+  <div class="app">
+    <div class="calc" role="application" aria-label="计算器">
+      <div class="screen" id="display">
+        <button class="copy" id="copyBtn" title="复制结果" aria-label="复制结果">复制</button>
+        <div class="expr" id="expression">&nbsp;</div>
+        <div class="value" id="result">0</div>
+      </div>
 
-  <div class="calculator">
-    <div class="display" id="display">
-      <button class="copy-btn" id="copyBtn" title="一键复制结果">⧉ 复制</button>
-      <div class="expression" id="expression">&nbsp;</div>
-      <div class="result" id="result">0</div>
+      <div class="pad">
+        <button class="key fn" data-action="clear">AC</button>
+        <button class="key fn" data-action="backspace" aria-label="退格">⌫</button>
+        <button class="key fn" data-action="lp">(</button>
+        <button class="key fn" data-action="rp">)</button>
+
+        <button class="key fn" data-action="sqrt">√</button>
+        <button class="key fn" data-action="square">x²</button>
+        <button class="key op" data-op="^">xʸ</button>
+        <button class="key op" data-op="/">÷</button>
+
+        <button class="key" data-num="7">7</button>
+        <button class="key" data-num="8">8</button>
+        <button class="key" data-num="9">9</button>
+        <button class="key op" data-op="*">×</button>
+
+        <button class="key" data-num="4">4</button>
+        <button class="key" data-num="5">5</button>
+        <button class="key" data-num="6">6</button>
+        <button class="key op" data-op="-">−</button>
+
+        <button class="key" data-num="1">1</button>
+        <button class="key" data-num="2">2</button>
+        <button class="key" data-num="3">3</button>
+        <button class="key op" data-op="+">+</button>
+
+        <button class="key fn" data-action="percent">%</button>
+        <button class="key" data-num="0">0</button>
+        <button class="key" data-num=".">.</button>
+        <button class="key eq" data-action="equals">=</button>
+      </div>
     </div>
-    <div class="buttons">
-      <button class="fn" data-action="clear">C</button>
-      <button class="fn" data-action="backspace">⌫</button>
-      <button class="fn" data-action="lp">(</button>
-      <button class="fn" data-action="rp">)</button>
 
-      <button class="fn" data-action="sqrt">√</button>
-      <button class="fn" data-action="square">x²</button>
-      <button class="op" data-op="^">xʸ</button>
-      <button class="op" data-op="/">÷</button>
-
-      <button data-num="7">7</button>
-      <button data-num="8">8</button>
-      <button data-num="9">9</button>
-      <button class="op" data-op="*">×</button>
-
-      <button data-num="4">4</button>
-      <button data-num="5">5</button>
-      <button data-num="6">6</button>
-      <button class="op" data-op="-">−</button>
-
-      <button data-num="1">1</button>
-      <button data-num="2">2</button>
-      <button data-num="3">3</button>
-      <button class="op" data-op="+">+</button>
-
-      <button class="fn" data-action="percent">%</button>
-      <button data-num="0">0</button>
-      <button data-num=".">.</button>
-      <button class="eq" data-action="equals">=</button>
-    </div>
+    <p class="hint">键盘可直接输入 · 点结果可复制</p>
   </div>
-
-  <div class="footer">高精度引擎 · 括号与 xʸ 幂运算 · 显示 15 位有效数字，链式运算保留 34 位</div>
 
   <div class="toast" id="toast"></div>
 
@@ -454,7 +574,7 @@
     const full = expr + current;
     let small = '\u00a0';
     let big = spaced(full) || '0';
-    let bigSize = 38;
+    let bigSize = 44;
 
     if (justEvaluated) {
       big = format(new Decimal(expr));
@@ -467,12 +587,15 @@
     }
 
     const digits = big.replace(/[^\d]/g, '').length;
-    if (digits > 16) bigSize = 20;
-    else if (digits > 12) bigSize = 26;
-    else if (digits > 8) bigSize = 32;
+    if (digits > 16) bigSize = 24;
+    else if (digits > 12) bigSize = 30;
+    else if (digits > 8) bigSize = 37;
 
     exprEl.textContent = small;
     resultEl.textContent = big;
+    // 超长数字时可横向滚动，始终露出最右侧（最新）那几位
+    exprEl.scrollLeft = exprEl.scrollWidth;
+    resultEl.scrollLeft = resultEl.scrollWidth;
     resultEl.style.fontSize = bigSize + 'px';
     resultEl.classList.remove('flash');
     void resultEl.offsetWidth;
