@@ -60,6 +60,12 @@ node test-jsdom.js        # 45 项：需要 npm i jsdom，用真实 DOM 事件�
 npm i jsdom && node test-jsdom.js
 ```
 
+另有一个可选的浏览器端用例 `e2e-browser.js`（真实点击 + 截图），需要本机装有 Playwright 的 Chromium：
+
+```bash
+npm i playwright && npx playwright install chromium && node e2e-browser.js
+```
+
 ## 许可证
 
 [MIT](LICENSE)

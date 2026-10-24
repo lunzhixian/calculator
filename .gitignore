@@ -13,3 +13,6 @@ android/assets/
 # 测试依赖
 node_modules/
 package-lock.json
+
+# E2E 截图
+screenshots/

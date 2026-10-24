@@ -1,8 +1,11 @@
 // 真实浏览器端到端测试：用 Chromium 打开 calculator.html，真实点击每个按键
+// 依赖：npm i playwright && npx playwright install chromium
+// 注意：部分容器/沙箱环境里 Chromium 无法启动（SIGTRAP），此时请在本机或 CI 上运行
 const path = require('path');
-const { chromium } = require('/tmp/pwtest/node_modules/playwright');
+const { chromium } = require('playwright');
 
-const FILE = 'file://' + path.resolve('/root/Documents/deepseek-harness/default-workspace/calc-fix/calculator.html');
+const FILE = 'file://' + path.join(__dirname, 'calculator.html');
+const SHOT_DIR = path.join(__dirname, 'screenshots');
 
 (async () => {
   const browser = await chromium.launch();
@@ -132,13 +135,14 @@ const FILE = 'file://' + path.resolve('/root/Documents/deepseek-harness/default-
 
   check('控制台无报错', errors.join(' | ') || '无', '无');
 
-  // —— 截图 ——
+  // —— 截图（先建目录）——
+  require('fs').mkdirSync(SHOT_DIR, { recursive: true });
   await clear(); await type('2^100'); await key('=');
-  await page.screenshot({ path: '/root/Documents/deepseek-harness/default-workspace/calc-shot-phone.png', fullPage: true });
+  await page.screenshot({ path: path.join(SHOT_DIR, 'phone-dark.png'), fullPage: true });
 
   await page.setViewportSize({ width: 1100, height: 900 });
   await clear(); await type('(2+3)*4'); await key('=');
-  await page.screenshot({ path: '/root/Documents/deepseek-harness/default-workspace/calc-shot-wide.png', fullPage: true });
+  await page.screenshot({ path: path.join(SHOT_DIR, 'wide-dark.png'), fullPage: true });
 
   await browser.close();
 
