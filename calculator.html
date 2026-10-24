@@ -160,9 +160,7 @@
     background: var(--eq);
     color: #1e1e2e;
     font-weight: 700;
-    grid-row: span 2;
   }
-  .zero { grid-column: span 2; }
 
   .error .result { color: var(--danger); }
 
@@ -186,36 +184,50 @@
       <div class="result" id="result">0</div>
     </div>
     <div class="buttons">
-      <button class="op" data-op="^">xʸ</button>
-      <button class="fn" data-action="sqrt">√</button>
-      <button class="fn" data-action="square">x²</button>
-      <button class="op" data-op="/">÷</button>
       <button class="fn" data-action="clear">C</button>
       <button class="fn" data-action="backspace">⌫</button>
-      <button class="fn" data-action="percent">%</button>
-      <button class="op" data-op="*">×</button>
+      <button class="fn" data-action="lp">(</button>
+      <button class="fn" data-action="rp">)</button>
+
+      <button class="fn" data-action="sqrt">√</button>
+      <button class="fn" data-action="square">x²</button>
+      <button class="op" data-op="^">xʸ</button>
+      <button class="op" data-op="/">÷</button>
+
       <button data-num="7">7</button>
       <button data-num="8">8</button>
       <button data-num="9">9</button>
-      <button class="op" data-op="-">−</button>
+      <button class="op" data-op="*">×</button>
+
       <button data-num="4">4</button>
       <button data-num="5">5</button>
       <button data-num="6">6</button>
-      <button class="op" data-op="+">+</button>
+      <button class="op" data-op="-">−</button>
+
       <button data-num="1">1</button>
       <button data-num="2">2</button>
       <button data-num="3">3</button>
-      <button class="eq" data-action="equals">=</button>
-      <button class="zero" data-num="0">0</button>
+      <button class="op" data-op="+">+</button>
+
+      <button class="fn" data-action="percent">%</button>
+      <button data-num="0">0</button>
       <button data-num=".">.</button>
+      <button class="eq" data-action="equals">=</button>
     </div>
   </div>
 
-  <div class="footer">高精度引擎 · 100 位有效数字 · 支持 xʸ 幂、√ 开方，超大数不再溢出</div>
+  <div class="footer">高精度引擎 · 括号与 xʸ 幂运算 · 显示 15 位有效数字，链式运算保留 34 位</div>
 
   <div class="toast" id="toast"></div>
 
 <script>
+/* decimal.js v10.4.3 (内嵌, MIT License) */
+/**
+ * Minified by jsDelivr using Terser v5.39.0.
+ * Original file: /npm/decimal.js@10.4.3/decimal.js
+ *
+ * Do NOT use SRI with dynamically generated files! https://www.jsdelivr.com/using-sri-with-dynamically-generated-files
+ */
 /* decimal.js v10.4.3 (内嵌, MIT License) */
 /**
  * Minified by jsDelivr using Terser v5.39.0.
@@ -239,173 +251,212 @@
   const exprEl = document.getElementById('expression');
   const resultEl = document.getElementById('result');
   const displayEl = document.getElementById('display');
+  const copyBtn = document.getElementById('copyBtn');
+  const toast = document.getElementById('toast');
 
-  let expr = '';            // 已确认的算式部分，如 '1+'
-  let current = '0';        // 正在输入的数字
-  let justEvaluated = false;
-  let lastExpr = '';
+  let expr = '';              // 已确定的算式片段（纯字符串，便于任意位置编辑）
+  let current = '';           // 正在输入的数字（空串 = 还没输入，显示为 0）
+  let justEvaluated = false;  // 刚刚按过 =
+  let lastExpr = '';          // 上次完整算式，用于小字回显
+  let toastTimer = null;
 
-  const isNum = t => /^-?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(t);
+  const SHOW_SD = 15;   // 屏幕显示 / 复制的有效数字位数
+  const STORE_SD = 34;  // 按 = 后存回算式时保留的有效数字（避免链式运算掉精度）
+
+  // 内部用 120 位精度计算，足够支撑 34 位的链式保留
+  Decimal.set({ precision: 120, rounding: Decimal.ROUND_HALF_UP, toExpNeg: -9, toExpPos: 21 });
+
+  const isNum = t => /^-?(Infinity|\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(t);
   const isOp  = t => '+-*/^'.includes(t);
-  const prec  = { '+': 1, '-': 1, '*': 2, '/': 2, '^': 3, 'u-': 4 };
+  // u- 为前缀负号：优先级低于 ^（-2^2 = -4）、高于 * /
+  const prec  = { '+': 1, '-': 1, '*': 2, '/': 2, 'u-': 2.5, '^': 3 };
+
   const apply = (a, op, b) => {
     switch (op) {
       case '+': return a.plus(b);
       case '-': return a.minus(b);
       case '*': return a.times(b);
-      case '/': return b.isZero() ? new Decimal(NaN) : a.div(b);
+      case '/': return a.div(b);   // 0/0 → NaN，x/0 → ±Infinity，交给 Decimal 判定
       case '^': return a.pow(b);
     }
+    return new Decimal(NaN);
   };
 
-  // 高精度配置：100 位有效数字
-  Decimal.set({ precision: 100, rounding: Decimal.ROUND_HALF_UP });
+  /* ---------- 词法分析：数字 / 科学计数法 / 运算符 / 括号 / Infinity ---------- */
+  function tokenize(s) {
+    const tokens = [];
+    let i = 0;
+    while (i < s.length) {
+      const ch = s[i];
+      if (ch === ' ') { i++; continue; }
+      if (isOp(ch) || ch === '(' || ch === ')') { tokens.push(ch); i++; continue; }
+      if (s.startsWith('Infinity', i)) { tokens.push('Infinity'); i += 8; continue; }
+      if (/[\d.]/.test(ch)) {
+        let j = i;
+        while (j < s.length && /[\d.]/.test(s[j])) j++;
+        // 吸收科学计数法 e/E 及符号指数，避免把 1e+300 拆成 1e / + / 300
+        if (j < s.length && (s[j] === 'e' || s[j] === 'E')) {
+          let k = j + 1;
+          if (k < s.length && (s[k] === '+' || s[k] === '-')) k++;
+          if (k < s.length && /\d/.test(s[k])) {
+            while (k < s.length && /\d/.test(s[k])) k++;
+            j = k;
+          }
+        }
+        const num = s.slice(i, j);
+        if (!isNum(num)) return null;
+        tokens.push(num);
+        i = j;
+        continue;
+      }
+      return null;
+    }
+    return tokens.length ? tokens : null;
+  }
 
-  function raw(n) { return n.toSignificantDigits(15).toString(); }
+  /* ---------- 中缀转后缀（Shunting-yard），支持括号与一元负号 ---------- */
+  function toRPN(tokens) {
+    const out = [], stack = [];
+    let prev = null;
+    for (const t of tokens) {
+      if (isNum(t)) { out.push(t); prev = t; continue; }
 
+      if (t === '(') { stack.push(t); prev = t; continue; }
+
+      if (t === ')') {
+        while (stack.length && stack[stack.length - 1] !== '(') out.push(stack.pop());
+        if (!stack.length) return null;   // 括号不匹配
+        stack.pop();
+        prev = t;
+        continue;
+      }
+
+      // 运算符
+      const unary = (t === '-' || t === '+') && (prev === null || isOp(prev) || prev === '(');
+      if (unary) {
+        // 前缀负号不在此处弹栈：让它留在栈上，由后续二元运算符的出栈条件决定结合范围
+        if (t === '-') stack.push('u-');
+        prev = t;
+        continue;
+      }
+      while (stack.length) {
+        const top = stack[stack.length - 1];
+        if (top === '(') break;
+        // ^ 右结合：只有严格更高的优先级才弹出
+        const pop = (t === '^') ? (prec[top] > prec[t]) : (prec[top] >= prec[t]);
+        if (!pop) break;
+        out.push(stack.pop());
+      }
+      stack.push(t);
+      prev = t;
+    }
+    while (stack.length) {
+      const top = stack.pop();
+      if (top === '(') return null;   // 括号未闭合
+      out.push(top);
+    }
+    return out;
+  }
+
+  /* ---------- 求值：全程 Decimal，非法输入返回 null ---------- */
+  function evaluateExpr(s) {
+    const tokens = tokenize(s);
+    if (!tokens) return null;
+    const rpn = toRPN(tokens);
+    if (!rpn) return null;
+    const vals = [];
+    for (const t of rpn) {
+      if (isNum(t)) { vals.push(new Decimal(t)); continue; }
+      if (t === 'u-') {
+        const a = vals.pop();
+        if (a === undefined) return null;
+        vals.push(a.neg());
+        continue;
+      }
+      const b = vals.pop(), a = vals.pop();
+      if (a === undefined || b === undefined) return null;
+      vals.push(apply(a, t, b));
+    }
+    return vals.length === 1 ? vals[0] : null;
+  }
+
+  /* ---------- 数值 → 字符串 ---------- */
   const SUP = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+
   function sci(s) {
     const m = s.match(/^([^eE]+)[eE]([+-]?\d+)$/);
     if (!m) return s;
-    const exp = m[2].split('').map(c => SUP[c] ?? c).join('');
+    const exp = m[2].replace(/^\+/, '').split('').map(c => SUP[c] ?? c).join('');
     return m[1] + '×10' + exp;
   }
 
+  // 复制用：无千分位、无 ×10 符号的纯数字串
+  function plain(n) {
+    if (n.isNaN()) return '';
+    if (!n.isFinite()) return n.isNegative() ? '-Infinity' : 'Infinity';
+    if (n.isInteger() && n.abs().lt('1e21')) return n.toFixed(0);
+    return n.toSignificantDigits(SHOW_SD).toString();
+  }
+
+  // 显示用：整数完整显示（≤21 位），否则 15 位有效数字 + 千分位 + ×10ⁿ
   function format(n) {
     if (n.isNaN()) return '错误';
     if (!n.isFinite()) return n.isNegative() ? '-∞' : '∞';
-    let s = n.toSignificantDigits(15).toString();
-    if (s === '-0') s = '0';
+    let s = plain(n);
+    if (s === '-0' || s === '0' || s === '') s = '0';
     if (/[eE]/.test(s)) return sci(s);
     const parts = s.split('.');
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return parts.join('.');
   }
 
-  // 安全求值：+ - * / ^，一元负号，遵循优先级（^ 右结合）
-  // 数值支持科学计数法（如 1e+1000），全程使用 Decimal 高精度运算
-  function evaluateExpr(s) {
-    const tokens = [];
-    let i = 0;
-    while (i < s.length) {
-      const ch = s[i];
-      if (ch === ' ') { i++; continue; }
-      if (isOp(ch)) { tokens.push(ch); i++; continue; }
-      if (/[\d.]/.test(ch)) {
-        let j = i;
-        while (j < s.length && /[\d.]/.test(s[j])) j++;
-        // 吸收科学计数法 e/E 及符号指数
-        if (j < s.length && (s[j] === 'e' || s[j] === 'E')) {
-          let k = j + 1;
-          if (k < s.length && (s[k] === '+' || s[k] === '-')) k++;
-          if (k < s.length && /\d/.test(s[k])) {
-            while (k < s.length && /\d/.test(s[k])) k++;
-            j = k;
-          }
-        }
-        tokens.push(s.slice(i, j));
-        i = j;
-        continue;
-      }
-      return new Decimal(NaN);
-    }
-    if (tokens.length === 0) return new Decimal(NaN);
-
-    // 中缀转后缀（Shunting-yard）
-    const out = [], stack = [];
-    let prev = null;
-    for (const t of tokens) {
-      if (isNum(t)) { out.push(t); prev = t; }
-      else if (isOp(t)) {
-        // 一元正负号
-        if ((t === '-' || t === '+') && (prev === null || isOp(prev))) {
-          if (t === '-') {
-            while (stack.length && prec[stack[stack.length - 1]] >= prec['u-']) out.push(stack.pop());
-            stack.push('u-');
-          }
-          prev = t;
-          continue;
-        }
-        // 二元运算符：^ 右结合，其余左结合
-        while (stack.length && prec[stack[stack.length - 1]] !== undefined &&
-               (t === '^' ? prec[stack[stack.length - 1]] > prec[t]
-                          : prec[stack[stack.length - 1]] >= prec[t])) {
-          out.push(stack.pop());
-        }
-        stack.push(t);
-        prev = t;
-      } else return new Decimal(NaN);
-    }
-    while (stack.length) out.push(stack.pop());
-
-    // 计算后缀表达式（Decimal 运算）
-    const vals = [];
-    for (const t of out) {
-      if (isNum(t)) vals.push(new Decimal(t));
-      else if (t === 'u-') {
-        const a = vals.pop();
-        if (a === undefined) return new Decimal(NaN);
-        vals.push(a.neg());
-      } else {
-        const b = vals.pop(), a = vals.pop();
-        if (a === undefined || b === undefined) return new Decimal(NaN);
-        vals.push(apply(a, t, b));
-      }
-    }
-    return vals.length === 1 ? vals[0] : new Decimal(NaN);
+  // 存回算式用：保留 34 位有效数字
+  function raw(n) {
+    if (!n.isFinite()) return n.isNegative() ? '-Infinity' : 'Infinity';
+    if (n.isInteger() && n.abs().lt('1e21')) return n.toFixed(0);
+    return n.toSignificantDigits(STORE_SD).toString();
   }
 
-  // 分词并加空格（自动识别科学计数法，避免把 e+300 拆开）
+  /* ---------- 算式美化：给二元运算符加空格、替换符号、保留科学计数法 ---------- */
+  const GLYPH = { '+': '+', '-': '−', '*': '×', '/': '÷', '^': '^' };
+
   function spaced(s) {
-    const tokens = [];
-    let i = 0;
-    while (i < s.length) {
-      const ch = s[i];
-      if (ch === ' ') { i++; continue; }
-      if (isOp(ch)) { tokens.push(ch); i++; continue; }
-      if (/[\d.]/.test(ch)) {
-        let j = i;
-        while (j < s.length && /[\d.]/.test(s[j])) j++;
-        if (j < s.length && (s[j] === 'e' || s[j] === 'E')) {
-          let k = j + 1;
-          if (k < s.length && (s[k] === '+' || s[k] === '-')) k++;
-          if (k < s.length && /\d/.test(s[k])) {
-            while (k < s.length && /\d/.test(s[k])) k++;
-            j = k;
-          }
-        }
-        tokens.push(s.slice(i, j));
-        i = j;
-        continue;
-      }
-      return s;
-    }
+    const tokens = tokenize(s);
+    if (!tokens) return s;
     let out = '';
-    for (let k = 0; k < tokens.length; k++) {
-      const t = tokens[k];
+    tokens.forEach((t, k) => {
+      const prev = tokens[k - 1];
       if (isOp(t)) {
-        const prevT = tokens[k - 1];
-        const isUnary = k === 0 || (prevT !== undefined && isOp(prevT));
-        out += (isUnary ? t : ' ' + t + ' ');
-      } else out += t;
-    }
+        const unary = (t === '-' || t === '+') && (k === 0 || isOp(prev) || prev === '(');
+        if (unary) { if (t === '-') out += '−'; }
+        else out += ' ' + GLYPH[t] + ' ';
+      } else if (t === '(') {
+        if (prev !== undefined && (isNum(prev) || prev === ')')) out += ' ';
+        out += '(';
+      } else if (t === ')') {
+        out += ')';
+      } else {
+        out += t;
+      }
+    });
     return out.trim();
   }
 
+  /* ---------- 渲染 ---------- */
   function render() {
     const full = expr + current;
-    const spacedFull = spaced(full);
     let small = '\u00a0';
-    let big = spacedFull || '0';
+    let big = spaced(full) || '0';
     let bigSize = 38;
 
     if (justEvaluated) {
       big = format(new Decimal(expr));
       small = spaced(lastExpr) + ' =';
     } else if (expr !== '') {
-      const base = isOp(full.slice(-1)) ? full.slice(0, -1) : full;
+      // 末尾是运算符或左括号时先去掉再预览
+      const base = /[+\-*/^(]$/.test(full) ? full.slice(0, -1) : full;
       const val = evaluateExpr(base);
-      if (val.isFinite()) small = '= ' + format(val);
+      if (val && !val.isNaN() && val.isFinite()) small = '= ' + format(val);
     }
 
     const digits = big.replace(/[^\d]/g, '').length;
@@ -426,40 +477,180 @@
     displayEl.classList.add('error');
     resultEl.textContent = '错误';
     exprEl.textContent = text;
-    expr = ''; current = '0'; justEvaluated = false;
+    expr = ''; current = ''; justEvaluated = false;
   }
 
+  /* ---------- 输入 ---------- */
   function inputDigit(d) {
-    if (justEvaluated) { expr = ''; current = '0'; justEvaluated = false; }
+    if (justEvaluated) { expr = ''; current = ''; justEvaluated = false; }
+    if (expr.slice(-1) === ')') expr += '*';   // 括号后直接打数字视为乘
     if (d === '.') {
       if (current === '') current = '0.';
       else if (!current.includes('.')) current += '.';
     } else {
       if (current === '0') current = d;
-      else if (current === '') current = d;
       else current += d;
     }
-    // 一键复制
-  const copyBtn = document.getElementById('copyBtn');
-  const toast = document.getElementById('toast');
-  let toastTimer = null;
+    render();
+  }
 
-  // 获取要复制的文本：已算完→结果原始值（无千分位、保留科学计数法）；输入中→算式或实时结果
+  function pressOp(op) {
+    if (justEvaluated) { current = ''; justEvaluated = false; }
+
+    if (current !== '') { expr += current; current = ''; }
+
+    if (expr === '') {
+      if (op === '-') { current = '-'; }
+      render();
+      return;
+    }
+
+    const last = expr.slice(-1);
+    if (isOp(last)) {
+      if (op === '-' && last !== '-') expr += op;   // 允许 5×-3 这种负号
+      else expr = expr.slice(0, -1) + op;           // 其余情况替换上一个运算符
+    } else if (last === '(') {
+      if (op === '-') expr += op;
+    } else {
+      expr += op;
+    }
+    render();
+  }
+
+  function pressEquals() {
+    if (justEvaluated) return;
+    const full = expr + current;
+    let value = null;
+    if (full !== '' && !isOp(full.slice(-1))) value = evaluateExpr(full);
+    if (!value || value.isNaN()) { showError(spaced(full)); return; }
+
+    lastExpr = full.trim();
+    if (!value.isFinite()) {                 // x/0 等：保留 ∞ 而不是报错
+      expr = value.isNegative() ? '-Infinity' : 'Infinity';
+      current = ''; justEvaluated = true;
+      render();
+      return;
+    }
+    expr = raw(value);
+    current = '';
+    justEvaluated = true;
+    render();
+  }
+
+  function pressPercent() {
+    if (justEvaluated) { expr = raw(new Decimal(expr).div(100)); render(); return; }
+    if (current === '' || current === '-' || current === '0') return;
+    current = raw(new Decimal(current).div(100));
+    render();
+  }
+
+  function pressSqrt() {
+    if (justEvaluated) {
+      const v = new Decimal(expr).sqrt();
+      if (v.isNaN()) { showError('√(' + lastExpr + ')'); return; }
+      lastExpr = '√' + lastExpr;
+      expr = raw(v);
+      render();
+      return;
+    }
+    if (current !== '' && current !== '-' && current !== '0') {
+      const v = new Decimal(current).sqrt();
+      if (v.isNaN()) { showError('√(' + current + ')'); return; }
+      current = raw(v);
+      render();
+      return;
+    }
+    const m = expr.match(/(-?[\d.]+(?:[eE][+-]?\d+)?)$/);
+    if (m) {
+      const v = new Decimal(m[1]).sqrt();
+      if (v.isNaN()) { showError('√(' + m[1] + ')'); return; }
+      expr = expr.slice(0, -m[1].length) + raw(v);
+      render();
+    }
+  }
+
+  function pressSquare() {
+    if (justEvaluated) {
+      lastExpr = '(' + lastExpr + ')²';
+      expr = raw(new Decimal(expr).pow(2));
+      render();
+      return;
+    }
+    if (current !== '' && current !== '-' && current !== '0') {
+      current = raw(new Decimal(current).pow(2));
+      render();
+      return;
+    }
+    const m = expr.match(/(-?[\d.]+(?:[eE][+-]?\d+)?)$/);
+    if (m) {
+      expr = expr.slice(0, -m[1].length) + raw(new Decimal(m[1]).pow(2));
+      render();
+    }
+  }
+
+  function openParenCount(s) {
+    let d = 0;
+    for (const c of s) { if (c === '(') d++; else if (c === ')') d--; }
+    return d;
+  }
+
+  function pressParen(p) {
+    if (justEvaluated) { expr = ''; current = '0'; justEvaluated = false; }
+
+    if (p === '(') {
+      if (current !== '') { expr += current; current = ''; }
+      if (/[\d)]$/.test(expr)) expr += '*';   // 数字或右括号后直接开括号 = 乘
+      expr += '(';
+    } else {
+      if (openParenCount(expr + current) <= 0) return;
+      if (current !== '') { expr += current; current = ''; }
+      if (/[+\-*/^(]$/.test(expr)) return;    // 运算符后面不能直接闭括号
+      expr += ')';
+    }
+    render();
+  }
+
+  function pressClear() {
+    expr = ''; current = ''; justEvaluated = false;
+    render();
+  }
+
+  function pressBackspace() {
+    if (justEvaluated) { pressClear(); return; }
+
+    if (current.length > 1) {
+      current = current.slice(0, -1);
+      if (current === '-') current = '';
+    } else if (current === '-') {
+      current = '';
+    } else if (current !== '') {
+      current = '';                       // 只剩一位数字：删掉回到未输入状态
+    } else {
+      // 输入区为空：从算式尾部删一个字符，若留下数字则接回输入区继续编辑
+      if (expr === '') { current = ''; render(); return; }
+      expr = expr.slice(0, -1);
+      const m = expr.match(/(\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)$/);
+      if (m) {
+        current = m[1];
+        expr = expr.slice(0, -m[1].length);
+      }
+    }
+    render();
+  }
+
+  /* ---------- 一键复制 ---------- */
   function getCopyText() {
     if (displayEl.classList.contains('error')) return '';
     if (justEvaluated) {
       const v = new Decimal(expr);
-      if (v.isNaN()) return '';
-      if (!v.isFinite()) return v.isNegative() ? '-Infinity' : 'Infinity';
-      return v.toSignificantDigits(15).toString();
+      return v.isNaN() ? '' : plain(v);
     }
     const full = (expr + current).trim();
     if (full === '') return '0';
-    if (!isOp(full.slice(-1))) {
+    if (!/[+\-*/^(]$/.test(full)) {
       const v = evaluateExpr(full);
-      if (v.isNaN()) return spaced(full);
-      return v.isFinite() ? v.toSignificantDigits(15).toString()
-                          : (v.isNegative() ? '-Infinity' : 'Infinity');
+      if (!v || v.isNaN()) return spaced(full);
+      return plain(v);
     }
     return spaced(full);
   }
@@ -503,123 +694,16 @@
     }
   }
 
+  // 复制按钮只在初始化时绑定一次（原先被误放进 inputDigit，导致每输入一位就多绑一次）
   copyBtn.addEventListener('click', copyResult);
 
-  render();
-  }
-
-  function pressOp(op) {
-    if (justEvaluated) { current = ''; justEvaluated = false; }
-
-    if (expr === '' && current === '' && op === '-') { current = '-'; render(); return; }
-
-    if (current !== '') {
-      expr += current;
-      current = '';
-    }
-    if (isOp(expr.slice(-1))) {
-      if (op === '-' && expr.slice(-1) !== '-') expr += op;
-      else expr = expr.slice(0, -1) + op;
-    } else {
-      expr += op;
-    }
-    render();
-  }
-
-  function pressEquals() {
-    if (justEvaluated) return;
-    const full = expr + current;
-    let value = new Decimal(NaN);
-    if (full !== '' && !isOp(full.slice(-1))) value = evaluateExpr(full);
-    if (value.isNaN()) { showError(spaced(full)); return; }
-    if (value.isInfinity()) {
-      lastExpr = full;
-      expr = value.isNegative() ? '-Infinity' : 'Infinity';
-      current = '';
-      justEvaluated = true;
-      render();
-      return;
-    }
-    lastExpr = full;
-    expr = raw(value);
-    current = '';
-    justEvaluated = true;
-    render();
-  }
-
-  function pressPercent() {
-    if (justEvaluated) { expr = raw(new Decimal(expr).div(100)); render(); return; }
-    if (current === '' || current === '0' || current === '-') return;
-    current = raw(new Decimal(current).div(100));
-    render();
-  }
-
-  function pressSqrt() {
-    if (justEvaluated) {
-      const v = new Decimal(expr).sqrt();
-      if (v.isNaN()) { showError('√(' + lastExpr + ')'); return; }
-      lastExpr = '√' + lastExpr;
-      expr = raw(v);
-      render();
-      return;
-    }
-    if (current !== '' && current !== '-') {
-      const v = new Decimal(current).sqrt();
-      if (v.isNaN()) { showError('√(' + current + ')'); return; }
-      current = raw(v);
-      render();
-      return;
-    }
-    const m = expr.match(/(-?[\d.]+(?:[eE][+-]?\d+)?)$/);
-    if (m) {
-      const v = new Decimal(m[1]).sqrt();
-      if (v.isNaN()) { showError('√(' + m[1] + ')'); return; }
-      expr = expr.slice(0, -m[1].length) + raw(v);
-      render();
-    }
-  }
-
-  function pressSquare() {
-    if (justEvaluated) {
-      const v = new Decimal(expr).pow(2);
-      lastExpr = '(' + lastExpr + ')²';
-      expr = raw(v);
-      render();
-      return;
-    }
-    if (current !== '' && current !== '-') {
-      current = raw(new Decimal(current).pow(2));
-      render();
-      return;
-    }
-    const m = expr.match(/(-?[\d.]+(?:[eE][+-]?\d+)?)$/);
-    if (m) {
-      expr = expr.slice(0, -m[1].length) + raw(new Decimal(m[1]).pow(2));
-      render();
-    }
-  }
-
-  function pressClear() {
-    expr = ''; current = '0'; justEvaluated = false;
-    render();
-  }
-
-  function pressBackspace() {
-    if (justEvaluated) { pressClear(); return; }
-    if (current.length > 1) current = current.slice(0, -1);
-    else if (current === '-') current = '0';
-    else if (current === '0' || current === '') {
-      if (isOp(expr.slice(-1))) expr = expr.slice(0, -1);
-    } else current = '0';
-    render();
-  }
-
-  // 按钮事件
+  /* ---------- 按钮事件 ---------- */
   document.querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', () => {
       const op = btn.dataset.op;
       const num = btn.dataset.num;
       const action = btn.dataset.action;
+
       if (num !== undefined) inputDigit(num);
       else if (op !== undefined) pressOp(op);
       else if (action === 'equals') pressEquals();
@@ -628,21 +712,27 @@
       else if (action === 'percent') pressPercent();
       else if (action === 'sqrt') pressSqrt();
       else if (action === 'square') pressSquare();
+      else if (action === 'lp') pressParen('(');
+      else if (action === 'rp') pressParen(')');
 
       document.querySelectorAll('.op').forEach(b => b.classList.remove('active'));
       if (op !== undefined) btn.classList.add('active');
     });
   });
 
-  // 键盘支持
+  /* ---------- 键盘 ---------- */
   document.addEventListener('keydown', (e) => {
     const key = e.key;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;   // 不劫持 Ctrl/Cmd 组合键
     if (/^\d$/.test(key)) inputDigit(key);
     else if (key === '.') inputDigit('.');
     else if (key === '+' || key === '-' || key === '*' || key === '/' || key === '^') pressOp(key);
+    else if (key === '(') pressParen('(');
+    else if (key === ')') pressParen(')');
     else if (key === 'Enter' || key === '=') { e.preventDefault(); pressEquals(); }
-    else if (key === 'Backspace') pressBackspace();
-    else if (key === 'Escape' || key.toLowerCase() === 'c') pressClear();
+    else if (key === 'Backspace') { e.preventDefault(); pressBackspace(); }
+    else if (key === 'Escape') pressClear();
+    else if (key === 'Delete') pressClear();
     else if (key === '%') pressPercent();
   });
 

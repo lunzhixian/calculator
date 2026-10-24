@@ -51,11 +51,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v1.0.0"
+          TAG="v1.1.0"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$TAG" calculator.apk --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$TAG" calculator.apk --repo "$GITHUB_REPOSITORY" \
-              --title "图形化计算器 v1.0.0" \
-              --notes "Android 版图形化计算器 APK（WebView 打包 calculator.html）"
+              --title "图形化计算器 v1.1.0" \
+              --notes "Android 版图形化计算器 APK（WebView 打包 calculator.html）\n\n本版修复：括号支持、一元负号优先级（-2^2=-4）、链式运算精度、复制按钮重复绑定、除零显示 ∞。"
           fi

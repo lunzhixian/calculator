@@ -1,0 +1,11 @@
+# 构建产物
+calculator.apk
+android/build/
+android/assets/
+*.apk
+*.idsig
+
+# 编辑器
+.idea/
+.vscode/
+.DS_Store

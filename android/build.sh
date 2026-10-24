@@ -29,8 +29,8 @@ cd android
   --auto-add-overlay \
   --min-sdk-version 21 \
   --target-sdk-version 34 \
-  --version-code 1 \
-  --version-name 1.0
+  --version-code 2 \
+  --version-name 1.1.0
 
 # 4. 编译 Java 源码
 javac -source 1.8 -target 1.8 -bootclasspath "$PLATFORM" -d build/classes \
